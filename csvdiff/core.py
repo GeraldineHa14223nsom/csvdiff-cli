@@ -1,91 +1,75 @@
-"""Core CSV diffing logic for csvdiff-cli."""
+"""Core diffing logic for csvdiff-cli."""
 
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set, Tuple
+from __future__ import annotations
+
 import csv
-import io
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Dict, List, Sequence, Tuple
+
+Row = Dict[str, str]
 
 
 @dataclass
 class DiffResult:
-    """Holds the result of diffing two CSV files."""
-    added: List[Dict] = field(default_factory=list)
-    removed: List[Dict] = field(default_factory=list)
-    modified: List[Tuple[Dict, Dict]] = field(default_factory=list)
-    unchanged: List[Dict] = field(default_factory=list)
-
-    @property
-    def has_differences(self) -> bool:
-        return bool(self.added or self.removed or self.modified)
-
-    def summary(self) -> Dict[str, int]:
-        return {
-            "added": len(self.added),
-            "removed": len(self.removed),
-            "modified": len(self.modified),
-            "unchanged": len(self.unchanged),
-        }
+    added: List[Row] = field(default_factory=list)
+    removed: List[Row] = field(default_factory=list)
+    modified: List[Tuple[Row, Row]] = field(default_factory=list)
+    unchanged: List[Row] = field(default_factory=list)
 
 
-def _read_csv(source: str) -> Tuple[List[str], List[Dict]]:
-    """Read CSV from a file path or string, returning headers and rows."""
+def has_differences(result: DiffResult) -> bool:
+    return bool(result.added or result.removed or result.modified)
+
+
+def summary(result: DiffResult) -> str:
+    return (
+        f"added={len(result.added)} removed={len(result.removed)} "
+        f"modified={len(result.modified)} unchanged={len(result.unchanged)}"
+    )
+
+
+def _read_csv(path: Path) -> List[Row]:
+    with path.open(newline="", encoding="utf-8") as fh:
+        return list(csv.DictReader(fh))
+
+
+def _make_key(row: Row, keys: Sequence[str]) -> Tuple[str, ...]:
     try:
-        with open(source, newline="", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            headers = reader.fieldnames or []
-            rows = [dict(row) for row in reader]
-    except (FileNotFoundError, OSError):
-        reader = csv.DictReader(io.StringIO(source))
-        headers = reader.fieldnames or []
-        rows = [dict(row) for row in reader]
-    return list(headers), rows
+        return tuple(row[k] for k in keys)
+    except KeyError as exc:
+        raise KeyError(f"Key column {exc} not found in row: {list(row.keys())}") from exc
 
 
-def _make_key(row: Dict, key_columns: List[str]) -> Tuple:
-    """Build a hashable key from specified columns."""
-    return tuple(row.get(col, "") for col in key_columns)
-
-
-def diff_csv(
-    source_a: str,
-    source_b: str,
-    key_columns: List[str],
-    ignore_columns: Optional[List[str]] = None,
+def diff_files(
+    old_path: Path,
+    new_path: Path,
+    keys: Sequence[str],
+    ignore_columns: Sequence[str] = (),
 ) -> DiffResult:
-    """Diff two CSV sources by key columns.
+    old_rows = _read_csv(old_path)
+    new_rows = _read_csv(new_path)
 
-    Args:
-        source_a: File path or CSV string for the base dataset.
-        source_b: File path or CSV string for the target dataset.
-        key_columns: Columns that uniquely identify each row.
-        ignore_columns: Columns to exclude from comparison.
+    def _strip(row: Row) -> Row:
+        return {k: v for k, v in row.items() if k not in ignore_columns}
 
-    Returns:
-        A DiffResult containing added, removed, modified, and unchanged rows.
-    """
-    ignore: Set[str] = set(ignore_columns or [])
-    _, rows_a = _read_csv(source_a)
-    _, rows_b = _read_csv(source_b)
-
-    index_a: Dict[Tuple, Dict] = {_make_key(r, key_columns): r for r in rows_a}
-    index_b: Dict[Tuple, Dict] = {_make_key(r, key_columns): r for r in rows_b}
+    old_index: Dict[Tuple[str, ...], Row] = {_make_key(r, keys): _strip(r) for r in old_rows}
+    new_index: Dict[Tuple[str, ...], Row] = {_make_key(r, keys): _strip(r) for r in new_rows}
 
     result = DiffResult()
 
-    for key, row_b in index_b.items():
-        if key not in index_a:
-            result.added.append(row_b)
+    for key, old_row in old_index.items():
+        if key not in new_index:
+            result.removed.append(old_row)
         else:
-            row_a = index_a[key]
-            a_cmp = {k: v for k, v in row_a.items() if k not in ignore}
-            b_cmp = {k: v for k, v in row_b.items() if k not in ignore}
-            if a_cmp != b_cmp:
-                result.modified.append((row_a, row_b))
+            new_row = new_index[key]
+            if old_row != new_row:
+                result.modified.append((old_row, new_row))
             else:
-                result.unchanged.append(row_b)
+                result.unchanged.append(old_row)
 
-    for key, row_a in index_a.items():
-        if key not in index_b:
-            result.removed.append(row_a)
+    for key, new_row in new_index.items():
+        if key not in old_index:
+            result.added.append(new_row)
 
     return result
