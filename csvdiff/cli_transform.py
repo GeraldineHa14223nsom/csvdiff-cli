@@ -19,7 +19,13 @@ def _parse_mapping(pairs: List[str], flag: str) -> Dict[str, str]:
                 f"--{flag} values must be in COL=VALUE format, got {pair!r}"
             )
         k, _, v = pair.partition("=")
-        result[k.strip()] = v.strip()
+        k = k.strip()
+        v = v.strip()
+        if not k:
+            raise argparse.ArgumentTypeError(
+                f"--{flag} values must have a non-empty key, got {pair!r}"
+            )
+        result[k] = v
     return result
 
 
@@ -101,4 +107,3 @@ def build_transform_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="command")
     _add_transform_parser(sub)
-    return parser
