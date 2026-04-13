@@ -1,80 +1,72 @@
-"""Command-line interface for csvdiff-cli."""
+"""Command-line interface for csvdiff."""
+from __future__ import annotations
 
 import sys
 import argparse
 from pathlib import Path
 
-from csvdiff.core import diff_files, has_differences, summary
+from csvdiff.core import diff_csv, has_differences
 from csvdiff.formatters import render
+from csvdiff.reconcile import reconcile_to_csv
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+    p = argparse.ArgumentParser(
         prog="csvdiff",
-        description="Diff two CSV files by configurable key columns.",
+        description="Diff and reconcile CSV files.",
     )
-    parser.add_argument("old", metavar="OLD", help="Path to the original CSV file.")
-    parser.add_argument("new", metavar="NEW", help="Path to the new CSV file.")
-    parser.add_argument(
-        "-k",
-        "--keys",
-        metavar="COL",
-        nargs="+",
+    p.add_argument("old", help="Original CSV file")
+    p.add_argument("new", help="New CSV file")
+    p.add_argument(
+        "-k", "--key",
         required=True,
-        help="One or more column names that form the row key.",
+        help="Comma-separated list of key column names",
     )
-    parser.add_argument(
-        "-f",
-        "--format",
-        dest="fmt",
+    p.add_argument(
+        "-f", "--format",
         choices=["text", "json", "csv"],
         default="text",
-        help="Output format (default: text).",
+        dest="fmt",
+        help="Output format (default: text)",
     )
-    parser.add_argument(
-        "--summary",
+    p.add_argument(
+        "--reconcile",
+        metavar="OUTPUT",
+        help="Write reconciled CSV (old + changes) to OUTPUT file",
+    )
+    p.add_argument(
+        "--no-color",
         action="store_true",
-        help="Print a summary line after the diff.",
+        help="Disable ANSI colour in text output",
     )
-    parser.add_argument(
-        "--ignore-columns",
-        metavar="COL",
-        nargs="+",
-        default=None,
-        help="Columns to exclude from comparison.",
-    )
-    return parser
+    return p
 
 
-def main(argv=None) -> int:
+def main(argv: list[str] | None = None) -> int:  # pragma: no cover
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    old_path = Path(args.old)
-    new_path = Path(args.new)
-
-    for p in (old_path, new_path):
-        if not p.exists():
-            print(f"csvdiff: error: file not found: {p}", file=sys.stderr)
+    for path in (args.old, args.new):
+        if not Path(path).exists():
+            print(f"csvdiff: file not found: {path}", file=sys.stderr)
             return 2
 
+    key_cols = [k.strip() for k in args.key.split(",")]
+
     try:
-        result = diff_files(
-            old_path,
-            new_path,
-            keys=args.keys,
-            ignore_columns=args.ignore_columns or [],
-        )
-    except (KeyError, ValueError) as exc:
-        print(f"csvdiff: error: {exc}", file=sys.stderr)
+        result = diff_csv(args.old, args.new, key_cols)
+    except Exception as exc:  # noqa: BLE001
+        print(f"csvdiff: error reading files: {exc}", file=sys.stderr)
         return 2
 
-    output = render(result, fmt=args.fmt)
-    if output:
-        print(output)
+    print(render(result, fmt=args.fmt))
 
-    if args.summary:
-        print(summary(result), file=sys.stderr)
+    if args.reconcile:
+        from csvdiff.core import _read_csv  # local import to keep top-level clean
+        base_rows = _read_csv(args.old)
+        csv_out = reconcile_to_csv(result, base_rows, key_cols)
+        Path(args.reconcile).write_text(csv_out, encoding="utf-8")
+        print(f"Reconciled output written to {args.reconcile}", file=sys.stderr)
 
     return 1 if has_differences(result) else 0
 
