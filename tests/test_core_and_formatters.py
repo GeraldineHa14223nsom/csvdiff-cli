@@ -93,3 +93,9 @@ def test_render_csv(result):
 def test_render_unknown_format(result):
     with pytest.raises(ValueError, match="Unknown format"):
         render(result, fmt="xml")
+
+
+def test_modified_row_key_matches(result):
+    """Ensure the key column value is consistent between before and after in modified rows."""
+    for old, new in result.modified:
+        assert old["id"] == new["id"]
