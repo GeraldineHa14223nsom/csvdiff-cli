@@ -1,67 +1,67 @@
-"""Statistics and summary reporting for CSV diff results."""
+"""Statistics computed from a DiffResult."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import Any
 
-if TYPE_CHECKING:
-    from csvdiff.core import DiffResult
+from csvdiff.core import DiffResult
 
 
-@dataclass(frozen=True)
+@dataclass
 class DiffStats:
-    """Aggregated statistics derived from a DiffResult."""
-
     added: int
     removed: int
     modified: int
     unchanged: int
 
-    @property
-    def total_changes(self) -> int:
-        return self.added + self.removed + self.modified
-
-    @property
-    def total_rows(self) -> int:
-        return self.added + self.removed + self.modified + self.unchanged
-
-    @property
-    def change_rate(self) -> float:
-        """Fraction of rows that changed (0.0 – 1.0)."""
-        if self.total_rows == 0:
-            return 0.0
-        return self.total_changes / self.total_rows
-
-    def as_dict(self) -> dict:
-        return {
-            "added": self.added,
-            "removed": self.removed,
-            "modified": self.modified,
-            "unchanged": self.unchanged,
-            "total_changes": self.total_changes,
-            "total_rows": self.total_rows,
-            "change_rate": round(self.change_rate, 4),
-        }
+    @classmethod
+    def from_result(cls, result: DiffResult) -> "DiffStats":
+        return cls(
+            added=len(result.added),
+            removed=len(result.removed),
+            modified=len(result.modified),
+            unchanged=len(result.unchanged),
+        )
 
 
-def compute_stats(result: "DiffResult") -> DiffStats:
-    """Compute statistics from a DiffResult."""
-    return DiffStats(
-        added=len(result.added),
-        removed=len(result.removed),
-        modified=len(result.modified),
-        unchanged=len(result.unchanged),
+def total_changes(stats: DiffStats) -> int:
+    """Return the number of rows that were added, removed, or modified."""
+    return stats.added + stats.removed + stats.modified
+
+
+def total_rows(stats: DiffStats) -> int:
+    """Return the total number of rows across both files (union count)."""
+    return stats.added + stats.removed + stats.modified + stats.unchanged
+
+
+def change_rate(stats: DiffStats) -> float:
+    """Return the fraction of rows that changed (0.0 – 1.0)."""
+    total = total_rows(stats)
+    if total == 0:
+        return 0.0
+    return total_changes(stats) / total
+
+
+def as_dict(stats: DiffStats) -> dict[str, Any]:
+    """Serialise *stats* to a plain dictionary suitable for JSON output."""
+    return {
+        "added": stats.added,
+        "removed": stats.removed,
+        "modified": stats.modified,
+        "unchanged": stats.unchanged,
+        "total_changes": total_changes(stats),
+        "total_rows": total_rows(stats),
+        "change_rate": change_rate(stats),
+        "change_rate_pct": round(change_rate(stats) * 100, 4),
+    }
+
+
+def format_stats(stats: DiffStats) -> str:
+    """Return a compact one-line summary string."""
+    d = as_dict(stats)
+    return (
+        f"+{d['added']} added, -{d['removed']} removed, "
+        f"~{d['modified']} modified, {d['unchanged']} unchanged "
+        f"({d['change_rate_pct']:.1f}% changed)"
     )
-
-
-def format_stats_text(stats: DiffStats) -> str:
-    """Return a human-readable summary string."""
-    lines = [
-        f"Added   : {stats.added}",
-        f"Removed : {stats.removed}",
-        f"Modified: {stats.modified}",
-        f"Unchanged: {stats.unchanged}",
-        f"Total changes: {stats.total_changes} / {stats.total_rows} rows "
-        f"({stats.change_rate:.1%})",
-    ]
-    return "\n".join(lines)
