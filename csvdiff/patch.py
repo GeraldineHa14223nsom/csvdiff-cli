@@ -37,11 +37,29 @@ def load_patch(fp: IO[str]) -> dict[str, Any]:
     return json.load(fp)
 
 
+def validate_patch(patch: dict[str, Any]) -> None:
+    """Raise ValueError if *patch* is missing required top-level fields.
+
+    A valid patch must contain 'keys', 'added', 'removed', and 'modified'.
+    """
+    required = {"keys", "added", "removed", "modified"}
+    missing = required - patch.keys()
+    if missing:
+        raise ValueError(
+            f"Patch is missing required field(s): {', '.join(sorted(missing))}"
+        )
+    if not isinstance(patch["keys"], list) or not patch["keys"]:
+        raise ValueError("Patch 'keys' must be a non-empty list of column names.")
+
+
 def apply_patch(rows: list[dict], patch: dict[str, Any]) -> list[dict]:
     """Apply *patch* to *rows*, returning the patched list of rows.
 
     Rows are matched by the key columns recorded in the patch.
+    Raises ValueError if the patch structure is invalid.
     """
+    validate_patch(patch)
+
     keys: list[str] = patch["keys"]
 
     def _key(row: dict) -> tuple:
