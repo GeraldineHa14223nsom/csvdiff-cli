@@ -83,3 +83,21 @@ def test_merge_no_base_uses_added_only():
     diff = DiffResult(added=[row], removed=[], modified=[], unchanged=[])
     result = merge(diff, KEYS)
     assert result.rows == [row]
+    assert not result.has_conflicts
+
+
+def test_merge_multiple_conflicts_all_recorded(base_rows):
+    """All conflicting rows should be tracked when strategy is not 'raise'."""
+    old1 = {"id": "1", "name": "Alice", "score": "90"}
+    new1 = {"id": "1", "name": "Alice", "score": "95"}
+    old2 = {"id": "2", "name": "Bob", "score": "80"}
+    new2 = {"id": "2", "name": "Bob", "score": "85"}
+    diff = DiffResult(
+        added=[],
+        removed=[],
+        modified=[(old1, new1), (old2, new2)],
+        unchanged=[],
+    )
+    result = merge(diff, KEYS, strategy="ours", base=base_rows)
+    assert result.has_conflicts
+    assert len(result.conflicts) == 2
