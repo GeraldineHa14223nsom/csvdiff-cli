@@ -11,16 +11,31 @@ from csvdiff.splitter import SplitterError, chunk_to_csv, split_by_column, split
 
 
 def _read_csv(path: str) -> List[dict]:
+    """Read a CSV file and return its rows as a list of dicts."""
     with open(path, newline="", encoding="utf-8") as fh:
         return list(csv.DictReader(fh))
 
 
+def _write_chunks(result, out_dir: pathlib.Path) -> None:
+    """Write each chunk in *result* to a separate CSV file under *out_dir*."""
+    for key, chunk_rows in result.chunks.items():
+        safe_key = key.replace("/", "_").replace("\\", "_")
+        dest = out_dir / f"chunk_{safe_key}.csv"
+        dest.write_text(chunk_to_csv(chunk_rows), encoding="utf-8")
+        print(f"wrote {len(chunk_rows)} rows -> {dest}")
+
+
 def cmd_split(args: argparse.Namespace) -> int:
+    """Entry point for the *split* sub-command."""
     try:
         rows = _read_csv(args.file)
     except FileNotFoundError:
         print(f"error: file not found: {args.file}", file=sys.stderr)
         return 2
+
+    if not rows:
+        print("error: input file is empty or has no data rows", file=sys.stderr)
+        return 1
 
     try:
         if args.by_column:
@@ -34,11 +49,7 @@ def cmd_split(args: argparse.Namespace) -> int:
     out_dir = pathlib.Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    for key, chunk_rows in result.chunks.items():
-        safe_key = key.replace("/", "_").replace("\\", "_")
-        dest = out_dir / f"chunk_{safe_key}.csv"
-        dest.write_text(chunk_to_csv(chunk_rows), encoding="utf-8")
-        print(f"wrote {len(chunk_rows)} rows -> {dest}")
+    _write_chunks(result, out_dir)
 
     print(f"total chunks: {result.chunk_count}, total rows: {result.total_rows}")
     return 0
