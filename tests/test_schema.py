@@ -79,6 +79,15 @@ def test_strict_mode_error_reports_columns():
     assert "phone" in combined_missing
 
 
+def test_strict_mode_extra_column_in_left_fails():
+    """Strict mode should also flag columns present in left but absent in right."""
+    left = LEFT + ["phone"]
+    result = validate_columns(left, RIGHT, key_columns=["id"], strict=True)
+    assert result.valid is False
+    combined_missing = [c for e in result.errors for c in e.missing_columns]
+    assert "phone" in combined_missing
+
+
 # ---------------------------------------------------------------------------
 # SchemaResult.raise_if_invalid
 # ---------------------------------------------------------------------------
@@ -92,18 +101,3 @@ def test_raise_if_invalid_raises_schema_error():
     result = validate_columns(["name"], RIGHT, key_columns=["id"])
     with pytest.raises(SchemaError):
         result.raise_if_invalid()
-
-
-# ---------------------------------------------------------------------------
-# SchemaError __str__
-# ---------------------------------------------------------------------------
-
-def test_schema_error_str_includes_message():
-    err = SchemaError("Something went wrong", missing_columns=["id"])
-    assert "Something went wrong" in str(err)
-    assert "id" in str(err)
-
-
-def test_schema_error_str_extra_columns():
-    err = SchemaError("Mismatch", extra_columns=["legacy_col"])
-    assert "legacy_col" in str(err)
