@@ -26,6 +26,11 @@ def result():
     )
 
 
+@pytest.fixture()
+def empty_result():
+    return DiffResult(added=[], removed=[], modified=[], unchanged=[])
+
+
 def test_compute_stats_counts(result):
     stats = compute_stats(result)
     assert stats.added == 1
@@ -49,10 +54,19 @@ def test_change_rate(result):
     assert stats.change_rate == pytest.approx(0.6)
 
 
-def test_change_rate_no_rows():
-    empty = DiffResult(added=[], removed=[], modified=[], unchanged=[])
-    stats = compute_stats(empty)
+def test_change_rate_no_rows(empty_result):
+    stats = compute_stats(empty_result)
     assert stats.change_rate == 0.0
+
+
+def test_total_rows_no_rows(empty_result):
+    stats = compute_stats(empty_result)
+    assert stats.total_rows == 0
+
+
+def test_total_changes_no_rows(empty_result):
+    stats = compute_stats(empty_result)
+    assert stats.total_changes == 0
 
 
 def test_as_dict_keys(result):
@@ -85,6 +99,12 @@ def test_format_stats_text_contains_rate(result):
     stats = compute_stats(result)
     text = format_stats_text(stats)
     assert "60.0%" in text
+
+
+def test_format_stats_text_zero_change_rate(empty_result):
+    stats = compute_stats(empty_result)
+    text = format_stats_text(stats)
+    assert "0.0%" in text
 
 
 def test_frozen_dataclass():
