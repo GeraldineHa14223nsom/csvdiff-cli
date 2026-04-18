@@ -85,5 +85,9 @@ def _encode_tsv(rows: List[dict], fieldnames: List[str] | None) -> str:
 
 
 def _decode_tsv(text: str) -> List[dict]:
+    if not text.strip():
+        return []
     reader = csv.DictReader(io.StringIO(text), delimiter="\t")
+    if reader.fieldnames is None:
+        raise EncoderError("TSV input has no header row")
     return [dict(row) for row in reader]
