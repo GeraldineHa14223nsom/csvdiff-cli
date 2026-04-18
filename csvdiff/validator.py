@@ -30,6 +30,10 @@ class ValidationResult:
     def violation_count(self) -> int:
         return len(self.violations)
 
+    def violations_for_column(self, column: str) -> List[RuleViolation]:
+        """Return all violations for a specific column."""
+        return [v for v in self.violations if v.column == column]
+
 
 Rule = Callable[[str], bool]
 
