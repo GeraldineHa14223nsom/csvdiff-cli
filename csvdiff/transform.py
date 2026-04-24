@@ -87,3 +87,23 @@ def rename_columns(
         }
         result.append(new_row)
     return result
+
+
+def drop_columns(
+    rows: Iterable[Dict[str, str]],
+    columns: List[str],
+) -> List[Dict[str, str]]:
+    """Remove specified columns from every row.
+
+    Args:
+        rows: Iterable of row dicts.
+        columns: List of column names to drop. Unknown column names are ignored.
+
+    Returns:
+        New list of row dicts with the specified columns removed.
+    """
+    drop_set = set(columns)
+    return [
+        {k: v for k, v in row.items() if k not in drop_set}
+        for row in rows
+    ]
